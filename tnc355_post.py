@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os, sys
 
+# --- sicherstellen, dass das Modulverzeichnis im Pfad ist ---
 _here = os.path.dirname(globals().get("__file__", "")) or os.getcwd()
 if _here not in sys.path:
     sys.path.insert(0, _here)
@@ -18,6 +19,10 @@ from ops_3d import emit_3d
 
 TOOLCHANGE_Z = 150.0
 
+
+# ------------------------------------------------------------
+# Hilfsfunktionen
+# ------------------------------------------------------------
 
 def _find_job(doc):
     try:
@@ -63,8 +68,12 @@ def _get_tool_number(op):
     return None
 
 
+# ------------------------------------------------------------
+# Haupt-Postprozessor
+# ------------------------------------------------------------
+
 def export(objectslist, filename, args=""):
-    import FreeCAD as App  # wichtig: lokaler Import
+    import FreeCAD as App  # lokaler Import für FreeCAD
 
     doc = App.ActiveDocument
     job = _find_job(doc)
@@ -72,6 +81,7 @@ def export(objectslist, filename, args=""):
     emit_tnc.reset_modals()
     state = State()
 
+    # Werkzeugdatenbank
     db = build_tool_db(job)
     csv = _tools_csv_path(job)
     if csv:
@@ -82,6 +92,9 @@ def export(objectslist, filename, args=""):
     name = _program_name(job)
     out.append(f"BEGIN PGM {name} MM")
 
+    # --------------------------------------------------------
+    # Operationsdurchlauf
+    # --------------------------------------------------------
     for obj in job.Operations.Group:
         if not getattr(obj, "Active", True):
             continue
@@ -91,7 +104,7 @@ def export(objectslist, filename, args=""):
         if not pth:
             continue
 
-        # ===== TOOL CALL =====
+        # ---------- TOOL CALL ----------
         new_tool = _get_tool_number(obj)
         if new_tool is not None and new_tool != state.tool_active:
             tool = db.get(new_tool)
@@ -111,7 +124,7 @@ def export(objectslist, filename, args=""):
             emit_tnc.coolant_on(out)
 
             state.tool_active = new_tool
-        # =====================
+        # -------------------------------
 
         tool = db.get(state.tool_active)
         fx = tool.feed_xy_mmmin if tool else None
@@ -126,4 +139,9 @@ def export(objectslist, filename, args=""):
             emit_contour_simple(out, pth.Commands, state, fx, fz)
 
     out.append(f"END PGM {name} MM")
-    return "\n".join(f"{i} {l}" for i, l in enumerate([""] + out)) + "\n"
+
+    return (
+        "\n" +
+        "\n".join(f"{i} {l}" for i, l in enumerate(out)) +
+        "\n"
+    )
