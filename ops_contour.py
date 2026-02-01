@@ -28,6 +28,7 @@ def emit_contour_simple(
     """
 
     comp_pending = radius_comp or ""
+    seen_first_feed = False
 
     for cmd in commands:
         name = str(getattr(cmd, "Name", "")).upper()
@@ -56,7 +57,13 @@ def emit_contour_simple(
             # XY move
             if x is not None or y is not None:
                 start_len = len(out)
-                comp = comp_pending if comp_pending and not rapid else ""
+                comp = ""
+                if not rapid:
+                    if comp_pending == "R0":
+                        comp = comp_pending
+                    elif comp_pending in ("RL", "RR"):
+                        if seen_first_feed:
+                            comp = comp_pending
                 _append_changed(
                     out,
                     x=x,
@@ -65,8 +72,14 @@ def emit_contour_simple(
                     korrektur=comp,
                     state=state,
                 )
-                if len(out) > start_len and comp:
-                    comp_pending = ""
+                if len(out) > start_len:
+                    if not rapid:
+                        if not seen_first_feed:
+                            seen_first_feed = True
+                        elif comp:
+                            comp_pending = ""
+                        if comp == "R0":
+                            comp_pending = ""
                 if x is not None:
                     state.x = x
                 if y is not None:
@@ -92,9 +105,18 @@ def emit_contour_simple(
 
             if cx is not None and cy is not None:
                 out.append(_CC(cx, cy))
-            comp = comp_pending if comp_pending else ""
+            comp = ""
+            if comp_pending == "R0":
+                comp = comp_pending
+            elif comp_pending in ("RL", "RR"):
+                if seen_first_feed:
+                    comp = comp_pending
             out.append(_C(x, y, cw=cw, korrektur=comp))
-            if comp:
+            if not seen_first_feed:
+                seen_first_feed = True
+            elif comp:
+                comp_pending = ""
+            if comp == "R0":
                 comp_pending = ""
 
             state.x = x
