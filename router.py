@@ -1,10 +1,13 @@
 # router.py - operation classification
 from __future__ import annotations
+import Path.Op.Profile
 from fc_adapter import scan_command_names
 
 DRILL_CMDS = {"G81","G82","G83","G73"}
 
-def classify(pth):
+def classify(pth, base=None):
+    if base is not None and isinstance(getattr(base, "Proxy", None), Path.Op.Profile.ObjectProfile):
+        return "contour"
     names = scan_command_names(pth)
     if names & DRILL_CMDS:
         return "drill"
