@@ -12,6 +12,7 @@ def emit_contour_simple(
     state,
     feed_xy=None,
     feed_z=None,
+    radius_comp=None,
 ):
     """
     Emit contour moves without LBL.
@@ -25,6 +26,9 @@ def emit_contour_simple(
     - feed_z is used for Z moves
     - rapid moves use FMAX
     """
+
+    comp_pending = radius_comp or ""
+    seen_first_feed = False
 
     for cmd in commands:
         name = str(getattr(cmd, "Name", "")).upper()
@@ -46,17 +50,36 @@ def emit_contour_simple(
                         out,
                         z=z,
                         f="FMAX" if rapid else feed_z,
+                        state=state,
                     )
                     state.z = z
 
             # XY move
             if x is not None or y is not None:
+                start_len = len(out)
+                comp = ""
+                if not rapid:
+                    if comp_pending == "R0":
+                        comp = comp_pending
+                    elif comp_pending in ("RL", "RR"):
+                        if seen_first_feed:
+                            comp = comp_pending
                 _append_changed(
                     out,
                     x=x,
                     y=y,
                     f="FMAX" if rapid else feed_xy,
+                    korrektur=comp,
+                    state=state,
                 )
+                if len(out) > start_len:
+                    if not rapid:
+                        if not seen_first_feed:
+                            seen_first_feed = True
+                        elif comp:
+                            comp_pending = ""
+                        if comp == "R0":
+                            comp_pending = ""
                 if x is not None:
                     state.x = x
                 if y is not None:
@@ -70,7 +93,7 @@ def emit_contour_simple(
             z = p.get("Z")
             if z is not None:
                 if state.z is None or abs(state.z - z) > 1e-9:
-                    _append_changed(out, z=z, f=feed_z)
+                    _append_changed(out, z=z, f=feed_z, state=state)
                     state.z = z
 
             # arc center + end point
@@ -82,7 +105,19 @@ def emit_contour_simple(
 
             if cx is not None and cy is not None:
                 out.append(_CC(cx, cy))
-            out.append(_C(x, y, cw=cw))
+            comp = ""
+            if comp_pending == "R0":
+                comp = comp_pending
+            elif comp_pending in ("RL", "RR"):
+                if seen_first_feed:
+                    comp = comp_pending
+            out.append(_C(x, y, cw=cw, korrektur=comp))
+            if not seen_first_feed:
+                seen_first_feed = True
+            elif comp:
+                comp_pending = ""
+            if comp == "R0":
+                comp_pending = ""
 
             state.x = x
             state.y = y

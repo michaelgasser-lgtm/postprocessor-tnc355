@@ -6,9 +6,21 @@ def emit_3d(out, state, tooldb, heights, pth):
         n = str(getattr(cmd, "Name", "")).upper()
         p = getattr(cmd, "Parameters", {}) or {}
         if n in ("G0","G00"):
-            _append_changed(out, x=p.get("X"), y=p.get("Y"), z=p.get("Z"), f="FMAX")
+            _append_changed(out, x=p.get("X"), y=p.get("Y"), z=p.get("Z"), f="FMAX", state=state)
+            if p.get("X") is not None:
+                state.x = p.get("X")
+            if p.get("Y") is not None:
+                state.y = p.get("Y")
+            if p.get("Z") is not None:
+                state.z = p.get("Z")
         elif n in ("G1","G01"):
-            _append_changed(out, x=p.get("X"), y=p.get("Y"), z=p.get("Z"), f=p.get("F"))
+            _append_changed(out, x=p.get("X"), y=p.get("Y"), z=p.get("Z"), f=p.get("F"), state=state)
+            if p.get("X") is not None:
+                state.x = p.get("X")
+            if p.get("Y") is not None:
+                state.y = p.get("Y")
+            if p.get("Z") is not None:
+                state.z = p.get("Z")
         elif n == "CC":
             out.append(_CC(p.get("X"), p.get("Y")))
         elif n == "C":

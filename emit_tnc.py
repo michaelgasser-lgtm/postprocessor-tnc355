@@ -84,9 +84,17 @@ def _extract_axes_from_line(line: str):
         elif ax=="Z": z=f
     return (x,y,z)
 
-def _append_changed(out, x=None, y=None, z=None, f=None, korrektur=""):
-    last_x, last_y, last_z = None, None, None
-    if out:
+def _state_coords(state):
+    if state is None:
+        return (None, None, None)
+    if isinstance(state, dict):
+        return (state.get("x"), state.get("y"), state.get("z"))
+    return (getattr(state, "x", None), getattr(state, "y", None), getattr(state, "z", None))
+
+
+def _append_changed(out, x=None, y=None, z=None, f=None, korrektur="", state=None):
+    last_x, last_y, last_z = _state_coords(state)
+    if last_x is None and last_y is None and last_z is None and out:
         last_x, last_y, last_z = _extract_axes_from_line(out[-1])
 
     axis_changed = False
