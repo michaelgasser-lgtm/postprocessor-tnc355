@@ -67,6 +67,27 @@ def emit_contour_simple(
             return False
         return False
 
+    def _get_prop(obj, name):
+        if obj is None:
+            return None
+        if hasattr(obj, name):
+            try:
+                return getattr(obj, name)
+            except Exception:
+                return None
+        return None
+
+    def _to_float(value):
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except Exception:
+            try:
+                return float(str(value).split()[0])
+            except Exception:
+                return None
+
     use_comp = _get_op_attr(op, "UseComp")
     side = _get_op_attr(op, "Side")
     direction = _get_op_attr(op, "Direction")
@@ -97,11 +118,72 @@ def emit_contour_simple(
             elif direction_token in ("ccw", "counterclockwise", "anti-clockwise", "anticlockwise"):
                 radius_mode = "RR"
 
-    out.append(f"(RADIUS_MODE={radius_mode})")
+    first_z_index = None
+    lead_in_xy = False
+    for idx, cmd in enumerate(commands):
+        p = getattr(cmd, "Parameters", {}) or {}
+        if first_z_index is None:
+            if p.get("X") is not None or p.get("Y") is not None:
+                lead_in_xy = True
+            if p.get("Z") is not None:
+                first_z_index = idx
+                break
 
-    for cmd in commands:
+    entry_index = None
+    if first_z_index is not None:
+        for idx in range(first_z_index + 1, len(commands)):
+            cmd = commands[idx]
+            name = str(getattr(cmd, "Name", "")).upper()
+            if name not in ("G0", "G00", "G1", "G01"):
+                continue
+            p = getattr(cmd, "Parameters", {}) or {}
+            if p.get("X") is not None or p.get("Y") is not None:
+                entry_index = idx
+                break
+
+    lead_in = bool(lead_in_xy and first_z_index is not None)
+
+    tool_diam = None
+    tool_controller = _get_op_attr(op, "ToolController")
+    if tool_controller is not None:
+        tool = (
+            _get_prop(tool_controller, "Tool")
+            or _get_prop(tool_controller, "Toolbit")
+            or _get_prop(tool_controller, "ToolBit")
+        )
+        tool_diam = (
+            _get_prop(tool, "Diameter")
+            or _get_prop(tool, "ToolDiameter")
+            or _get_prop(tool, "Diam")
+        )
+    if tool_diam is None:
+        tool_diam = (
+            _get_op_attr(op, "Diameter")
+            or _get_op_attr(op, "ToolDiameter")
+            or _get_op_attr(op, "Diam")
+        )
+
+    tool_diam_mm = _to_float(tool_diam)
+    tool_radius = tool_diam_mm / 2.0 if tool_diam_mm else 0.0
+    rnd_radius = round(max(1.05 * tool_radius, tool_radius + 0.5), 1)
+
+    out.append(f"(DEBUG LeadIn={lead_in})")
+    out.append(f"(DEBUG EntryIndex={entry_index})")
+    out.append(f"(DEBUG RND_RADIUS={rnd_radius})")
+    out.append(f"(DEBUG RADIUS_MODE={radius_mode})")
+
+    if radius_mode in ("RL", "RR") and (not lead_in or entry_index is None):
+        out.append("(ERROR: RL/RR requires Lead-In)")
+        out.append("(Contour aborted)")
+        return
+
+    rnd_emitted = False
+
+    for idx, cmd in enumerate(commands):
         name = str(getattr(cmd, "Name", "")).upper()
         p = getattr(cmd, "Parameters", {}) or {}
+        phase_before_entry = entry_index is not None and idx < entry_index
+        phase_entry = entry_index is not None and idx == entry_index
 
         # ----------------------------
         # Linear moves (rapid / feed)
@@ -125,14 +207,14 @@ def emit_contour_simple(
 
             # XY move
             if x is not None or y is not None:
-                start_len = len(out)
                 comp = ""
-                if not rapid:
-                    if comp_pending == "R0":
-                        comp = comp_pending
-                    elif comp_pending in ("RL", "RR"):
-                        if seen_first_feed:
-                            comp = comp_pending
+                if phase_before_entry:
+                    comp = "R0"
+                elif phase_entry and radius_mode in ("RL", "RR"):
+                    if not rnd_emitted:
+                        out.append(f"RND R{rnd_radius:.1f}")
+                        rnd_emitted = True
+                    comp = radius_mode
                 _append_changed(
                     out,
                     x=x,
@@ -141,14 +223,6 @@ def emit_contour_simple(
                     korrektur=comp,
                     state=state,
                 )
-                if len(out) > start_len:
-                    if not rapid:
-                        if not seen_first_feed:
-                            seen_first_feed = True
-                        elif comp:
-                            comp_pending = ""
-                        if comp == "R0":
-                            comp_pending = ""
                 if x is not None:
                     state.x = x
                 if y is not None:
@@ -174,19 +248,7 @@ def emit_contour_simple(
 
             if cx is not None and cy is not None:
                 out.append(_CC(cx, cy))
-            comp = ""
-            if comp_pending == "R0":
-                comp = comp_pending
-            elif comp_pending in ("RL", "RR"):
-                if seen_first_feed:
-                    comp = comp_pending
-            out.append(_C(x, y, cw=cw, korrektur=comp))
-            if not seen_first_feed:
-                seen_first_feed = True
-            elif comp:
-                comp_pending = ""
-            if comp == "R0":
-                comp_pending = ""
+            out.append(_C(x, y, cw=cw))
 
             state.x = x
             state.y = y
