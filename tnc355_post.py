@@ -13,6 +13,7 @@ from fc_adapter import unwrap_base, get_heights
 from tool_db import build_tool_db, write_tool_csv, check_toolnumbers_unique
 from router import classify
 import emit_tnc
+import Path.Op.Profile
 from ops_drill import emit_drilling
 from ops_contour import emit_contour_simple
 from ops_3d import emit_3d
@@ -104,6 +105,24 @@ def export(objectslist, filename, args=""):
         if not pth:
             continue
 
+        use_comp = getattr(base, "UseComp", None)
+        side = getattr(base, "Side", None)
+        direction = getattr(base, "Direction", None)
+        komp = None
+        if use_comp is True:
+            komp = "R0"
+        elif use_comp is False:
+            if direction == "CW" and side == "Outside":
+                komp = "RL"
+            elif direction == "CCW" and side == "Inside":
+                komp = "RL"
+            elif direction == "CCW" and side == "Outside":
+                komp = "RR"
+            elif direction == "CW" and side == "Inside":
+                komp = "RR"
+        is_profile = isinstance(getattr(base, "Proxy", None), Path.Op.Profile.ObjectProfile)
+        radius_comp = komp if is_profile else "R0"
+
         # ---------- TOOL CALL ----------
         new_tool = _get_tool_number(obj)
         if new_tool is not None and new_tool != state.tool_active:
@@ -130,7 +149,7 @@ def export(objectslist, filename, args=""):
         fx = tool.feed_xy_mmmin if tool else None
         fz = tool.feed_z_mmmin if tool else None
 
-        kind = classify(pth)
+        kind = classify(pth, base)
         if kind == "drill":
             emit_drilling(out, state, db, get_heights(obj), pth)
         elif kind == "3d":
