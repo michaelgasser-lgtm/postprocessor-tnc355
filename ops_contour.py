@@ -12,6 +12,7 @@ def emit_contour_simple(
     state,
     feed_xy=None,
     feed_z=None,
+    op=None,
 ):
     """
     Emit contour moves without LBL.
@@ -25,6 +26,78 @@ def emit_contour_simple(
     - feed_z is used for Z moves
     - rapid moves use FMAX
     """
+
+    def _iter_op_chain(root):
+        cur = root
+        seen = set()
+        for _ in range(16):
+            if cur is None or id(cur) in seen:
+                break
+            seen.add(id(cur))
+            yield cur
+            cur = getattr(cur, "Base", None)
+
+    def _get_op_attr(root, name):
+        for obj in _iter_op_chain(root):
+            if hasattr(obj, name):
+                try:
+                    value = getattr(obj, name)
+                except Exception:
+                    continue
+                if value is not None:
+                    return value
+        return None
+
+    def _normalize_token(value):
+        if value is None:
+            return None
+        try:
+            text = str(value)
+        except Exception:
+            return None
+        return text.strip().lower()
+
+    def _normalize_bool(value):
+        if isinstance(value, bool):
+            return value
+        token = _normalize_token(value)
+        if token in ("1", "true", "yes", "y", "on"):
+            return True
+        if token in ("0", "false", "no", "n", "off"):
+            return False
+        return False
+
+    use_comp = _get_op_attr(op, "UseComp")
+    side = _get_op_attr(op, "Side")
+    direction = _get_op_attr(op, "Direction")
+    out.append(
+        f"(DEBUG UseComp={use_comp!r} type={type(use_comp).__name__} | "
+        f"Side={side!r} type={type(side).__name__} | "
+        f"Direction={direction!r} type={type(direction).__name__})"
+    )
+
+    use_comp_bool = _normalize_bool(use_comp)
+    side_token = _normalize_token(side)
+    direction_token = _normalize_token(direction)
+
+    radius_mode = "R0"
+    if use_comp_bool:
+        if side_token in ("left", "l", "g41", "rl"):
+            radius_mode = "RL"
+        elif side_token in ("right", "r", "g42", "rr"):
+            radius_mode = "RR"
+        elif side_token in ("inside", "inner", "in"):
+            if direction_token in ("cw", "clockwise"):
+                radius_mode = "RR"
+            elif direction_token in ("ccw", "counterclockwise", "anti-clockwise", "anticlockwise"):
+                radius_mode = "RL"
+        elif side_token in ("outside", "outer", "out"):
+            if direction_token in ("cw", "clockwise"):
+                radius_mode = "RL"
+            elif direction_token in ("ccw", "counterclockwise", "anti-clockwise", "anticlockwise"):
+                radius_mode = "RR"
+
+    out.append(f"(RADIUS_MODE={radius_mode})")
 
     for cmd in commands:
         name = str(getattr(cmd, "Name", "")).upper()

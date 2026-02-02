@@ -136,7 +136,7 @@ def export(objectslist, filename, args=""):
         elif kind == "3d":
             emit_3d(out, state, db, get_heights(obj), pth)
         else:
-            emit_contour_simple(out, pth.Commands, state, fx, fz)
+            emit_contour_simple(out, pth.Commands, state, fx, fz, op=obj)
 
     out.append(f"END PGM {name} MM")
 
