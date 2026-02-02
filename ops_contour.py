@@ -81,7 +81,7 @@ def emit_contour_simple(
     direction_token = _normalize_token(direction)
 
     radius_mode = "R0"
-    if use_comp_bool:
+    if not use_comp_bool:
         if side_token in ("left", "l", "g41", "rl"):
             radius_mode = "RL"
         elif side_token in ("right", "r", "g42", "rr"):
