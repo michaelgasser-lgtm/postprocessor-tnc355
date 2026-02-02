@@ -70,6 +70,11 @@ def emit_contour_simple(
     use_comp = _get_op_attr(op, "UseComp")
     side = _get_op_attr(op, "Side")
     direction = _get_op_attr(op, "Direction")
+    out.append(
+        f"(DEBUG UseComp={use_comp!r} type={type(use_comp).__name__} | "
+        f"Side={side!r} type={type(side).__name__} | "
+        f"Direction={direction!r} type={type(direction).__name__})"
+    )
 
     use_comp_bool = _normalize_bool(use_comp)
     side_token = _normalize_token(side)
