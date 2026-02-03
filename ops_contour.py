@@ -118,32 +118,29 @@ def emit_contour_simple(
             elif direction_token in ("ccw", "counterclockwise", "anti-clockwise", "anticlockwise"):
                 radius_mode = "RR"
 
-    xy_indices = []
-    last_z_only_index = None
+    first_xy_index = None
     for idx, cmd in enumerate(commands):
         name = str(getattr(cmd, "Name", "")).upper()
         if name not in ("G0", "G00", "G1", "G01"):
             continue
         p = getattr(cmd, "Parameters", {}) or {}
-        has_x = p.get("X") is not None
-        has_y = p.get("Y") is not None
-        has_z = p.get("Z") is not None
-        if has_x or has_y:
-            xy_indices.append(idx)
-        if has_z and not (has_x or has_y):
-            last_z_only_index = idx
+        if p.get("X") is not None or p.get("Y") is not None:
+            first_xy_index = idx
+            break
 
-    if not xy_indices:
+    if first_xy_index is None:
         entry_index = None
-    elif last_z_only_index is None:
-        entry_index = xy_indices[0]
+        lead_in = False
     else:
-        entry_index = next(
-            (xy_idx for xy_idx in xy_indices if xy_idx > last_z_only_index),
-            None,
+        entry_index = first_xy_index
+        lead_in = any(
+            str(getattr(cmd, "Name", "")).upper() in ("G0", "G00", "G1", "G01")
+            and (
+                (getattr(cmd, "Parameters", {}) or {}).get("X") is not None
+                or (getattr(cmd, "Parameters", {}) or {}).get("Y") is not None
+            )
+            for idx, cmd in enumerate(commands[:entry_index])
         )
-
-    lead_in = bool(entry_index is not None and any(xy_idx < entry_index for xy_idx in xy_indices))
 
     tool_diam = None
     tool_controller = _get_op_attr(op, "ToolController")
