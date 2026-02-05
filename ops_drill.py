@@ -68,32 +68,18 @@ def _emit_cycle_def(out: List[str], dg: Dict[str, Any]) -> None:
     # Dwell format with comma
     vzeit = _fmt_time_seconds_with_comma(dwell)
 
-    if kind == "G83":
-        # Deep drilling / peck drilling
-        out.append("CYCL DEF 1.0 TIEFBOHREN")
-        out.append(f"CYCL DEF 1.1 ABST {abst}")
-        out.append(f"CYCL DEF 1.2 TIEFE {tiefe}")
-        # ZUSTLG: if peck is given, use it as step (negative). Otherwise use depth.
-        if peck is not None:
-            out.append(f"CYCL DEF 1.3 ZUSTLG {_fmt_negative(peck)}")
-        else:
-            out.append(f"CYCL DEF 1.3 ZUSTLG {tiefe}")
-        out.append(f"CYCL DEF 1.4 VZEIT {vzeit}")
-        out.append(f"CYCL DEF 1.5 F {fnum}")
-    elif kind == "G82":
-        # Counterbore with dwell (best-effort mapping)
-        out.append("CYCL DEF 200.0 BOHREN")
-        out.append(f"CYCL DEF 200.1 TIEFE {tiefe}")
-        out.append(f"CYCL DEF 200.2 ABST {abst}")
-        out.append(f"CYCL DEF 200.3 VZEIT {vzeit}")
-        out.append(f"CYCL DEF 200.4 F {fnum}")
+    out.append("CYCL DEF 1.0 TIEFBOHREN")
+    out.append(f"CYCL DEF 1.1 ABST {abst}")
+    out.append(f"CYCL DEF 1.2 TIEFE {tiefe}")
+    if peck is not None:
+        out.append(f"CYCL DEF 1.3 ZUSTLG {_fmt_negative(peck)}")
     else:
-        # G81 (simple drilling)
-        out.append("CYCL DEF 200.0 BOHREN")
-        out.append(f"CYCL DEF 200.1 TIEFE {tiefe}")
-        out.append(f"CYCL DEF 200.2 ABST {abst}")
-        out.append(f"CYCL DEF 200.3 VZEIT 0,000")
-        out.append(f"CYCL DEF 200.4 F {fnum}")
+        out.append(f"CYCL DEF 1.3 ZUSTLG {tiefe}")
+    if kind == "G82":
+        out.append(f"CYCL DEF 1.4 VZEIT {vzeit}")
+    else:
+        out.append("CYCL DEF 1.4 VZEIT 0,000")
+    out.append(f"CYCL DEF 1.5 F {fnum}")
 
 
 def _flush_drill_group(out: List[str], dg: Dict[str, Any]) -> None:
