@@ -118,29 +118,37 @@ def emit_contour_simple(
             elif direction_token in ("ccw", "counterclockwise", "anti-clockwise", "anticlockwise"):
                 radius_mode = "RR"
 
-    first_xy_index = None
+    plunge_index = None
     for idx, cmd in enumerate(commands):
         name = str(getattr(cmd, "Name", "")).upper()
         if name not in ("G0", "G00", "G1", "G01"):
             continue
         p = getattr(cmd, "Parameters", {}) or {}
-        if p.get("X") is not None or p.get("Y") is not None:
-            first_xy_index = idx
+        z = _to_float(p.get("Z"))
+        if z is not None and z < 0:
+            plunge_index = idx
             break
 
-    if first_xy_index is None:
-        entry_index = None
-        lead_in = False
-    else:
-        entry_index = first_xy_index
-        lead_in = any(
-            str(getattr(cmd, "Name", "")).upper() in ("G0", "G00", "G1", "G01")
-            and (
-                (getattr(cmd, "Parameters", {}) or {}).get("X") is not None
-                or (getattr(cmd, "Parameters", {}) or {}).get("Y") is not None
+    entry_index = None
+    lead_in = False
+    if plunge_index is not None:
+        for idx, cmd in enumerate(commands[plunge_index + 1 :], start=plunge_index + 1):
+            name = str(getattr(cmd, "Name", "")).upper()
+            if name not in ("G0", "G00", "G1", "G01"):
+                continue
+            p = getattr(cmd, "Parameters", {}) or {}
+            if p.get("X") is not None or p.get("Y") is not None:
+                entry_index = idx
+                break
+        if entry_index is not None:
+            lead_in = any(
+                str(getattr(cmd, "Name", "")).upper() in ("G0", "G00", "G1", "G01")
+                and (
+                    (getattr(cmd, "Parameters", {}) or {}).get("X") is not None
+                    or (getattr(cmd, "Parameters", {}) or {}).get("Y") is not None
+                )
+                for cmd in commands[:entry_index]
             )
-            for idx, cmd in enumerate(commands[:entry_index])
-        )
 
     tool_diam = None
     tool_controller = _get_op_attr(op, "ToolController")
