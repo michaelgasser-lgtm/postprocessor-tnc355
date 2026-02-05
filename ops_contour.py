@@ -191,6 +191,21 @@ def emit_contour_simple(
         return
 
     rnd_emitted = False
+    replace_leadin_arc_index = None
+    if (
+        not use_comp_bool
+        and radius_mode in ("RL", "RR")
+        and lead_in
+        and entry_index is not None
+        and entry_index > 0
+    ):
+        candidate = commands[entry_index - 1]
+        candidate_name = str(getattr(candidate, "Name", "")).upper()
+        if candidate_name in ("G2", "G02", "G3", "G03"):
+            candidate_params = getattr(candidate, "Parameters", {}) or {}
+            if candidate_params.get("X") is not None or candidate_params.get("Y") is not None:
+                replace_leadin_arc_index = entry_index - 1
+    leadin_arc_replaced = False
 
     for idx, cmd in enumerate(commands):
         name = str(getattr(cmd, "Name", "")).upper()
@@ -223,7 +238,7 @@ def emit_contour_simple(
                 comp = ""
                 if phase_before_entry:
                     comp = "R0"
-                elif phase_entry and radius_mode in ("RL", "RR"):
+                elif phase_entry and radius_mode in ("RL", "RR") and not leadin_arc_replaced:
                     if not rnd_emitted:
                         out.append(f"RND R{rnd_radius:.1f}")
                         rnd_emitted = True
@@ -258,6 +273,24 @@ def emit_contour_simple(
             x = p.get("X")
             y = p.get("Y")
             cw = name in ("G2", "G02")
+
+            if idx == replace_leadin_arc_index:
+                out.append("(DEBUG replaced lead-in arc with L at contour start for RL/RR)")
+                if not rnd_emitted:
+                    out.append(f"RND R{rnd_radius:.1f}")
+                    rnd_emitted = True
+                _append_changed(
+                    out,
+                    x=x,
+                    y=y,
+                    f=feed_xy,
+                    korrektur=radius_mode,
+                    state=state,
+                )
+                state.x = x
+                state.y = y
+                leadin_arc_replaced = True
+                continue
 
             if cx is not None and cy is not None:
                 out.append(_CC(cx, cy))
