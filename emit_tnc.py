@@ -5,6 +5,8 @@ RAPID_FEED = 9999
 
 _FEED_MODAL = None
 
+_TOOL_INITIALIZED = False
+
 def reset_modals():
     global _FEED_MODAL
     _FEED_MODAL = None
@@ -20,7 +22,10 @@ def _fmt_coord(prefix, val, nd=3):
 def safe_z(out, z):
     """
     Fahre sicher auf Z-Höhe mit FMAX.
+    Nur erlaubt, wenn bereits ein Werkzeug initialisiert ist.
     """
+    if not _TOOL_INITIALIZED:
+        return
     out.append(f"L  Z+{z:.3f}  FMAX")
 
 def stop_spindle(out):
@@ -55,6 +60,7 @@ def _fmt_feed_num(v):
         return None
 
 def tool_call(out, tnum, rpm=None):
+    global _TOOL_INITIALIZED    
     """
     Heidenhain TOOL CALL.
     Beispiel:
@@ -64,7 +70,7 @@ def tool_call(out, tnum, rpm=None):
         out.append(f"TOOL CALL {int(tnum)} Z S{int(rpm)}")
     else:
         out.append(f"TOOL CALL {int(tnum)} Z")
-
+    _TOOL_INITIALIZED = True
 
 _AXIS_RE = re.compile(r'(?:^|\s)([XYZ])([+-]?\d+(?:\.\d+)?)')
 
@@ -84,9 +90,17 @@ def _extract_axes_from_line(line: str):
         elif ax=="Z": z=f
     return (x,y,z)
 
-def _append_changed(out, x=None, y=None, z=None, f=None, korrektur=""):
-    last_x, last_y, last_z = None, None, None
-    if out:
+def _state_coords(state):
+    if state is None:
+        return (None, None, None)
+    if isinstance(state, dict):
+        return (state.get("x"), state.get("y"), state.get("z"))
+    return (getattr(state, "x", None), getattr(state, "y", None), getattr(state, "z", None))
+
+
+def _append_changed(out, x=None, y=None, z=None, f=None, korrektur="", state=None):
+    last_x, last_y, last_z = _state_coords(state)
+    if last_x is None and last_y is None and last_z is None and out:
         last_x, last_y, last_z = _extract_axes_from_line(out[-1])
 
     axis_changed = False
