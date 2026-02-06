@@ -189,6 +189,7 @@ def emit_contour_simple(
     last_contour_x = None
     last_contour_y = None
     last_contour_idx = None
+    last_contour_debug_emitted = False
     pending_leadout = False
     if (
         not use_comp_bool
@@ -227,6 +228,11 @@ def emit_contour_simple(
                 and idx > last_contour_idx
                 and ((x is None and y is None) or rapid)
             ):
+                if not last_contour_debug_emitted:
+                    out.append(
+                        f"(DEBUG LastContourPoint=X={last_contour_x} Y={last_contour_y} IDX={last_contour_idx})"
+                    )
+                    last_contour_debug_emitted = True
                 out.append("(DEBUG LeadOut=True)")
                 out.append(f"(DEBUG LeadOutLastPoint=X={last_contour_x} Y={last_contour_y})")
                 out.append(f"(DEBUG LeadOutRadiusMode={radius_mode})")
@@ -343,6 +349,12 @@ def emit_contour_simple(
         # ----------------------------
         else:
             continue
+
+    if not last_contour_debug_emitted and last_contour_idx is not None:
+        out.append(
+            f"(DEBUG LastContourPoint=X={last_contour_x} Y={last_contour_y} IDX={last_contour_idx})"
+        )
+        last_contour_debug_emitted = True
 
     if radius_mode in ("RL", "RR") and rnd_emitted:
         if last_contour_x is None or last_contour_y is None:
