@@ -186,6 +186,8 @@ def emit_contour_simple(
 
     rnd_emitted = False
     replace_leadin_arc_index = None
+    last_contour_x = None
+    last_contour_y = None
     if (
         not use_comp_bool
         and radius_mode in ("RL", "RR")
@@ -249,6 +251,9 @@ def emit_contour_simple(
                     state.x = x
                 if y is not None:
                     state.y = y
+                if name in ("G1", "G01") and (entry_index is None or idx >= entry_index):
+                    last_contour_x = state.x
+                    last_contour_y = state.y
 
         # ----------------------------
         # Arc moves (G2 / G3)
@@ -283,6 +288,9 @@ def emit_contour_simple(
                 )
                 state.x = x
                 state.y = y
+                if entry_index is None or idx >= entry_index:
+                    last_contour_x = state.x
+                    last_contour_y = state.y
                 leadin_arc_replaced = True
                 continue
 
@@ -292,9 +300,37 @@ def emit_contour_simple(
 
             state.x = x
             state.y = y
+            if (x is not None or y is not None) and (entry_index is None or idx >= entry_index):
+                last_contour_x = state.x
+                last_contour_y = state.y
 
         # ----------------------------
         # Ignore all other commands
         # ----------------------------
         else:
             continue
+
+    if radius_mode in ("RL", "RR") and rnd_emitted:
+        if last_contour_x is None or last_contour_y is None:
+            out.append("(DEBUG LeadOut=False reason=no_contour_moves)")
+        else:
+            out.append("(DEBUG LeadOut=True)")
+            out.append(f"(DEBUG LeadOutLastPoint=X={last_contour_x} Y={last_contour_y})")
+            out.append(f"(DEBUG LeadOutRadiusMode={radius_mode})")
+            out.append(f"(DEBUG LeadOutRND={rnd_radius:.1f})")
+            out.append("(DEBUG LeadOutEmit=RND)")
+            out.append(f"RND R{rnd_radius:.1f}")
+            out.append("(DEBUG LeadOutEmit=R0)")
+            _append_changed(
+                out,
+                x=last_contour_x,
+                y=last_contour_y,
+                korrektur="R0",
+                state=state,
+            )
+            state.x = last_contour_x
+            state.y = last_contour_y
+    elif radius_mode in ("RL", "RR"):
+        out.append("(DEBUG LeadOut=False reason=radius_not_activated)")
+    else:
+        out.append("(DEBUG LeadOut=False reason=no_radius_comp)")
