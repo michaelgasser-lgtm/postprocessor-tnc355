@@ -3,7 +3,7 @@
 # FreeCAD-compatible version (Path.Command based)
 
 from typing import List, Any
-from emit_tnc import _append_changed, _CC, _C
+from emit_tnc import _append_changed, _CC, _C, _L
 
 
 def emit_contour_simple(
@@ -129,19 +129,22 @@ def emit_contour_simple(
             return None
 
         leadout_idx = None
-        for idx in range(z_idx - 1, 0, -1):
-            if (
-                _is_arc_with_xy_and_center(commands[idx])
-                and str(getattr(commands[idx - 1], "Name", "")).upper() == "CC"
-            ):
+        for idx in range(z_idx - 1, -1, -1):
+            if _is_arc_with_xy_and_center(commands[idx]):
                 leadout_idx = idx
                 break
 
         if leadout_idx is None:
             return None
 
+        if leadout_idx - 1 < 0:
+            return None
+
+        if str(getattr(commands[leadout_idx - 1], "Name", "")).upper() != "CC":
+            return None
+
         contour_idx = None
-        for idx in range(leadout_idx - 1, -1, -1):
+        for idx in range(leadout_idx - 2, -1, -1):
             name = str(getattr(commands[idx], "Name", "")).upper()
             if not (_is_linear_move(name) or _is_arc_move(name)):
                 continue
@@ -160,6 +163,7 @@ def emit_contour_simple(
         contour_x, contour_y = _get_xy(contour_params)
 
         return {
+            "z_idx": z_idx,
             "contour_idx": contour_idx,
             "contour_x": contour_x,
             "contour_y": contour_y,
@@ -167,6 +171,8 @@ def emit_contour_simple(
             "leadout_x": leadout_x,
             "leadout_y": leadout_y,
         }
+
+    leadout_detection = _detect_leadout_points()
 
     use_comp = _get_op_attr(op, "UseComp")
     side = _get_op_attr(op, "Side")
@@ -301,34 +307,34 @@ def emit_contour_simple(
             z = p.get("Z")
             rapid = name in ("G0", "G00")
 
+            is_detected_leadout_z = (
+                leadout_detection is not None
+                and idx == leadout_detection["z_idx"]
+                and _is_pure_z_move(cmd)
+            )
+
             if (
                 pending_leadout
-                and z is not None
-                and last_contour_idx is not None
-                and idx > last_contour_idx
-                and ((x is None and y is None) or rapid)
+                and is_detected_leadout_z
             ):
                 if not last_contour_debug_emitted:
                     out.append(
                         f"(DEBUG LastContourPoint=X={last_contour_x} Y={last_contour_y} IDX={last_contour_idx})"
                     )
                     last_contour_debug_emitted = True
+                contour_x = leadout_detection["contour_x"]
+                contour_y = leadout_detection["contour_y"]
                 out.append("(DEBUG LeadOut=True)")
-                out.append(f"(DEBUG LeadOutLastPoint=X={last_contour_x} Y={last_contour_y})")
+                out.append(f"(DEBUG LeadOutLastPoint=X={contour_x} Y={contour_y})")
                 out.append(f"(DEBUG LeadOutRadiusMode={radius_mode})")
                 out.append(f"(DEBUG LeadOutRND={rnd_radius:.1f})")
+                out.append(_L(x=contour_x, y=contour_y, korrektur=radius_mode))
                 out.append("(DEBUG LeadOutEmit=RND)")
                 out.append(f"RND R{rnd_radius:.1f}")
                 out.append("(DEBUG LeadOutEmit=R0)")
-                _append_changed(
-                    out,
-                    x=last_contour_x,
-                    y=last_contour_y,
-                    korrektur="R0",
-                    state=state,
-                )
-                state.x = last_contour_x
-                state.y = last_contour_y
+                out.append(_L(x=contour_x, y=contour_y, korrektur="R0"))
+                state.x = contour_x
+                state.y = contour_y
                 pending_leadout = False
 
             # Z move first
@@ -375,6 +381,9 @@ def emit_contour_simple(
         # Arc moves (G2 / G3)
         # ----------------------------
         elif name in ("G2", "G02", "G3", "G03"):
+            if leadout_detection is not None and idx == leadout_detection["leadout_idx"]:
+                continue
+
             # optional Z before arc
             z = p.get("Z")
             if z is not None:
@@ -436,7 +445,6 @@ def emit_contour_simple(
         )
         last_contour_debug_emitted = True
 
-    leadout_detection = _detect_leadout_points()
     if leadout_detection is not None:
         out.append(
             f"(DEBUG ContourEndPoint=X={leadout_detection['contour_x']} "
