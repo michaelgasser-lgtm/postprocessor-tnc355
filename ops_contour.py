@@ -188,6 +188,8 @@ def emit_contour_simple(
     replace_leadin_arc_index = None
     last_contour_x = None
     last_contour_y = None
+    last_contour_idx = None
+    pending_leadout = False
     if (
         not use_comp_bool
         and radius_mode in ("RL", "RR")
@@ -217,6 +219,31 @@ def emit_contour_simple(
             y = p.get("Y")
             z = p.get("Z")
             rapid = name in ("G0", "G00")
+
+            if (
+                pending_leadout
+                and z is not None
+                and last_contour_idx is not None
+                and idx > last_contour_idx
+                and ((x is None and y is None) or rapid)
+            ):
+                out.append("(DEBUG LeadOut=True)")
+                out.append(f"(DEBUG LeadOutLastPoint=X={last_contour_x} Y={last_contour_y})")
+                out.append(f"(DEBUG LeadOutRadiusMode={radius_mode})")
+                out.append(f"(DEBUG LeadOutRND={rnd_radius:.1f})")
+                out.append("(DEBUG LeadOutEmit=RND)")
+                out.append(f"RND R{rnd_radius:.1f}")
+                out.append("(DEBUG LeadOutEmit=R0)")
+                _append_changed(
+                    out,
+                    x=last_contour_x,
+                    y=last_contour_y,
+                    korrektur="R0",
+                    state=state,
+                )
+                state.x = last_contour_x
+                state.y = last_contour_y
+                pending_leadout = False
 
             # Z move first
             if z is not None:
@@ -254,6 +281,9 @@ def emit_contour_simple(
                 if name in ("G1", "G01") and (entry_index is None or idx >= entry_index):
                     last_contour_x = state.x
                     last_contour_y = state.y
+                    last_contour_idx = idx
+                    if radius_mode in ("RL", "RR") and rnd_emitted and not pending_leadout:
+                        pending_leadout = True
 
         # ----------------------------
         # Arc moves (G2 / G3)
@@ -291,6 +321,7 @@ def emit_contour_simple(
                 if entry_index is None or idx >= entry_index:
                     last_contour_x = state.x
                     last_contour_y = state.y
+                    last_contour_idx = idx
                 leadin_arc_replaced = True
                 continue
 
@@ -303,6 +334,9 @@ def emit_contour_simple(
             if (x is not None or y is not None) and (entry_index is None or idx >= entry_index):
                 last_contour_x = state.x
                 last_contour_y = state.y
+                last_contour_idx = idx
+                if radius_mode in ("RL", "RR") and rnd_emitted and not pending_leadout:
+                    pending_leadout = True
 
         # ----------------------------
         # Ignore all other commands
@@ -313,23 +347,10 @@ def emit_contour_simple(
     if radius_mode in ("RL", "RR") and rnd_emitted:
         if last_contour_x is None or last_contour_y is None:
             out.append("(DEBUG LeadOut=False reason=no_contour_moves)")
+        elif pending_leadout:
+            out.append("(DEBUG LeadOut=False reason=no_post_contour_z_retract)")
         else:
-            out.append("(DEBUG LeadOut=True)")
-            out.append(f"(DEBUG LeadOutLastPoint=X={last_contour_x} Y={last_contour_y})")
-            out.append(f"(DEBUG LeadOutRadiusMode={radius_mode})")
-            out.append(f"(DEBUG LeadOutRND={rnd_radius:.1f})")
-            out.append("(DEBUG LeadOutEmit=RND)")
-            out.append(f"RND R{rnd_radius:.1f}")
-            out.append("(DEBUG LeadOutEmit=R0)")
-            _append_changed(
-                out,
-                x=last_contour_x,
-                y=last_contour_y,
-                korrektur="R0",
-                state=state,
-            )
-            state.x = last_contour_x
-            state.y = last_contour_y
+            out.append("(DEBUG LeadOut=False reason=already_emitted)")
     elif radius_mode in ("RL", "RR"):
         out.append("(DEBUG LeadOut=False reason=radius_not_activated)")
     else:
