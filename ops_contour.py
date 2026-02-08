@@ -96,6 +96,46 @@ def emit_contour_simple(
     def _is_xy_motion(cmd_name):
         return cmd_name in ("G0", "G00", "G1", "G01", "G2", "G02", "G3", "G03")
 
+    def _is_positive_z_retract(cmd):
+        name = str(getattr(cmd, "Name", "")).upper()
+        params = getattr(cmd, "Parameters", {}) or {}
+        z = _to_float(params.get("Z"))
+        if z is None or z <= 0:
+            return False
+        if name in ("G0", "G00", "G1", "G01"):
+            return True
+        if name == "L":
+            return True
+        return False
+
+    def _collect_leadout_raw_debug_data():
+        last_contour_idx = None
+        for idx, cmd in enumerate(commands):
+            name = str(getattr(cmd, "Name", "")).upper()
+            if not _is_xy_motion(name):
+                continue
+            params = getattr(cmd, "Parameters", {}) or {}
+            if _has_xy(params):
+                last_contour_idx = idx
+
+        if last_contour_idx is None:
+            return None, []
+
+        retract_idx = None
+        for idx, cmd in enumerate(commands[last_contour_idx + 1 :], start=last_contour_idx + 1):
+            if _is_positive_z_retract(cmd):
+                retract_idx = idx
+                break
+
+        if retract_idx is None:
+            return None, []
+
+        leadout_raw_items = []
+        for idx, cmd in enumerate(commands[last_contour_idx + 1 : retract_idx], start=last_contour_idx + 1):
+            leadout_raw_items.append((idx, cmd))
+
+        return retract_idx, leadout_raw_items
+
     use_comp = _get_op_attr(op, "UseComp")
     side = _get_op_attr(op, "Side")
     direction = _get_op_attr(op, "Direction")
@@ -155,7 +195,7 @@ def emit_contour_simple(
                 for cmd in commands[:entry_index]
             )
 
-    leadout_raw_retract_idx, leadout_raw_items = _collect_leadout_raw_debug_data(entry_index)
+    leadout_raw_retract_idx, leadout_raw_items = _collect_leadout_raw_debug_data()
     leadout_raw_debug_emitted = False
 
     tool_diam = None
@@ -210,6 +250,19 @@ def emit_contour_simple(
     leadin_arc_replaced = False
 
     for idx, cmd in enumerate(commands):
+        if not leadout_raw_debug_emitted and idx == leadout_raw_retract_idx:
+            if leadout_raw_items:
+                out.append("(DEBUG LeadOutRaw BEGIN)")
+                for raw_idx, raw_cmd in leadout_raw_items:
+                    out.append(
+                        f"(DEBUG   idx={raw_idx} Name={getattr(raw_cmd, 'Name', '')} "
+                        f"Params={getattr(raw_cmd, 'Parameters', {})})"
+                    )
+                out.append("(DEBUG LeadOutRaw END)")
+            else:
+                out.append("(DEBUG LeadOutRaw: none)")
+            leadout_raw_debug_emitted = True
+
         name = str(getattr(cmd, "Name", "")).upper()
         p = getattr(cmd, "Parameters", {}) or {}
         phase_before_entry = entry_index is not None and idx < entry_index
@@ -315,3 +368,6 @@ def emit_contour_simple(
         # ----------------------------
         else:
             continue
+
+    if not leadout_raw_debug_emitted:
+        out.append("(DEBUG LeadOutRaw: none)")
