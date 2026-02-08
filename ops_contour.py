@@ -96,56 +96,6 @@ def emit_contour_simple(
     def _is_xy_motion(cmd_name):
         return cmd_name in ("G0", "G00", "G1", "G01", "G2", "G02", "G3", "G03")
 
-    def _is_positive_z_retract(cmd):
-        name = str(getattr(cmd, "Name", "")).upper()
-        if name not in ("G0", "G00", "G1", "G01"):
-            return False
-        params = getattr(cmd, "Parameters", {}) or {}
-        z = _to_float(params.get("Z"))
-        return z is not None and z > 0
-
-    def _collect_leadout_raw_debug_data(entry_idx=None):
-        plunge_idx = None
-        for idx, cmd in enumerate(commands):
-            name = str(getattr(cmd, "Name", "")).upper()
-            if name not in ("G0", "G00", "G1", "G01"):
-                continue
-            params = getattr(cmd, "Parameters", {}) or {}
-            z = _to_float(params.get("Z"))
-            if z is not None and z < 0:
-                plunge_idx = idx
-                break
-
-        retract_idx = None
-        start_idx = plunge_idx + 1 if plunge_idx is not None else 0
-        for idx in range(start_idx, len(commands)):
-            if _is_positive_z_retract(commands[idx]):
-                retract_idx = idx
-                break
-
-        if retract_idx is None:
-            return None, []
-
-        xy_indices = []
-        for idx, cmd in enumerate(commands[:retract_idx]):
-            if entry_idx is not None and idx < entry_idx:
-                continue
-            name = str(getattr(cmd, "Name", "")).upper()
-            if not _is_xy_motion(name):
-                continue
-            if _has_xy(getattr(cmd, "Parameters", {}) or {}):
-                xy_indices.append(idx)
-
-        if len(xy_indices) < 2:
-            return retract_idx, []
-
-        last_contour_idx = xy_indices[-2]
-        raw_items = []
-        for idx in range(last_contour_idx + 1, retract_idx):
-            cmd = commands[idx]
-            raw_items.append((idx, str(getattr(cmd, "Name", "")), getattr(cmd, "Parameters", {}) or {}))
-        return retract_idx, raw_items
-
     use_comp = _get_op_attr(op, "UseComp")
     side = _get_op_attr(op, "Side")
     direction = _get_op_attr(op, "Direction")
@@ -274,20 +224,6 @@ def emit_contour_simple(
             z = p.get("Z")
             rapid = name in ("G0", "G00")
 
-            if (
-                not leadout_raw_debug_emitted
-                and leadout_raw_retract_idx is not None
-                and idx == leadout_raw_retract_idx
-            ):
-                if leadout_raw_items:
-                    out.append("(DEBUG LeadOutRaw BEGIN)")
-                    for raw_idx, raw_name, raw_params in leadout_raw_items:
-                        out.append(f"(DEBUG   idx={raw_idx} Name={raw_name} Params={raw_params})")
-                    out.append("(DEBUG LeadOutRaw END)")
-                else:
-                    out.append("(DEBUG LeadOutRaw: none)")
-                leadout_raw_debug_emitted = True
-
             # Z move first
             if z is not None:
                 if state.z is None or abs(state.z - z) > 1e-9:
@@ -379,6 +315,3 @@ def emit_contour_simple(
         # ----------------------------
         else:
             continue
-
-    if not leadout_raw_debug_emitted:
-        out.append("(DEBUG LeadOutRaw: none)")
