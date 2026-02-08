@@ -155,6 +155,9 @@ def emit_contour_simple(
                 for cmd in commands[:entry_index]
             )
 
+    leadout_raw_retract_idx, leadout_raw_items = _collect_leadout_raw_debug_data(entry_index)
+    leadout_raw_debug_emitted = False
+
     tool_diam = None
     tool_controller = _get_op_attr(op, "ToolController")
     if tool_controller is not None:
