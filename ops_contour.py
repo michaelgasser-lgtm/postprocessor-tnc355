@@ -6,6 +6,15 @@ from typing import List, Any
 from emit_tnc import _append_changed, _CC, _C
 
 
+# Set to True to include DEBUG comments in emitted NC output.
+CONTOUR_DEBUG = False
+
+
+def _append_debug(out: List[str], message: str) -> None:
+    if CONTOUR_DEBUG:
+        out.append(f"(DEBUG {message})")
+
+
 def emit_contour_simple(
     out: List[str],
     commands: List[Any],
@@ -102,10 +111,11 @@ def emit_contour_simple(
     use_comp = _get_op_attr(op, "UseComp")
     side = _get_op_attr(op, "Side")
     direction = _get_op_attr(op, "Direction")
-    out.append(
-        f"(DEBUG UseComp={use_comp!r} type={type(use_comp).__name__} | "
+    _append_debug(
+        out,
+        f"UseComp={use_comp!r} type={type(use_comp).__name__} | "
         f"Side={side!r} type={type(side).__name__} | "
-        f"Direction={direction!r} type={type(direction).__name__})"
+        f"Direction={direction!r} type={type(direction).__name__}",
     )
 
     use_comp_bool = _normalize_bool(use_comp)
@@ -185,10 +195,10 @@ def emit_contour_simple(
     tool_radius = tool_diam_mm / 2.0 if tool_diam_mm else 0.0
     rnd_radius = round(max(1.05 * tool_radius, tool_radius + 0.5), 1)
 
-    out.append(f"(DEBUG LeadIn={lead_in})")
-    out.append(f"(DEBUG EntryIndex={entry_index})")
-    out.append(f"(DEBUG RND_RADIUS={rnd_radius})")
-    out.append(f"(DEBUG RADIUS_MODE={radius_mode})")
+    _append_debug(out, f"LeadIn={lead_in}")
+    _append_debug(out, f"EntryIndex={entry_index}")
+    _append_debug(out, f"RND_RADIUS={rnd_radius}")
+    _append_debug(out, f"RADIUS_MODE={radius_mode}")
 
     if radius_mode in ("RL", "RR") and (not lead_in or entry_index is None):
         out.append("(ERROR: RL/RR requires Lead-In)")
@@ -280,7 +290,7 @@ def emit_contour_simple(
             cw = name in ("G2", "G02")
 
             if idx == replace_leadin_arc_index:
-                out.append("(DEBUG replaced lead-in arc with L at contour start for RL/RR)")
+                _append_debug(out, "replaced lead-in arc with L at contour start for RL/RR")
                 if not rnd_emitted:
                     out.append(f"RND R{rnd_radius:.1f}")
                     rnd_emitted = True
