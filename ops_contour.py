@@ -197,10 +197,6 @@ def emit_contour_simple(
 
     rnd_emitted = False
     replace_leadin_arc_index = None
-    last_contour_x = None
-    last_contour_y = None
-    last_contour_idx = None
-    last_contour_debug_emitted = False
     if (
         not use_comp_bool
         and radius_mode in ("RL", "RR")
@@ -264,10 +260,6 @@ def emit_contour_simple(
                     state.x = x
                 if y is not None:
                     state.y = y
-                if name in ("G1", "G01") and (entry_index is None or idx >= entry_index):
-                    last_contour_x = state.x
-                    last_contour_y = state.y
-                    last_contour_idx = idx
 
         # ----------------------------
         # Arc moves (G2 / G3)
@@ -302,10 +294,6 @@ def emit_contour_simple(
                 )
                 state.x = x
                 state.y = y
-                if entry_index is None or idx >= entry_index:
-                    last_contour_x = state.x
-                    last_contour_y = state.y
-                    last_contour_idx = idx
                 leadin_arc_replaced = True
                 continue
 
@@ -315,19 +303,9 @@ def emit_contour_simple(
 
             state.x = x
             state.y = y
-            if (x is not None or y is not None) and (entry_index is None or idx >= entry_index):
-                last_contour_x = state.x
-                last_contour_y = state.y
-                last_contour_idx = idx
 
         # ----------------------------
         # Ignore all other commands
         # ----------------------------
         else:
             continue
-
-    if not last_contour_debug_emitted and last_contour_idx is not None:
-        out.append(
-            f"(DEBUG LastContourPoint=X={last_contour_x} Y={last_contour_y} IDX={last_contour_idx})"
-        )
-        last_contour_debug_emitted = True
