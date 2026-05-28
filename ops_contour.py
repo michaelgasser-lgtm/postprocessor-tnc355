@@ -3,7 +3,7 @@
 # FreeCAD-compatible version (Path.Command based)
 
 from typing import List, Any
-from emit_tnc import _append_changed, _CC, _C
+from emit_tnc import _append_changed, _append_rnd, _CC, _C
 
 
 # Set to True to include DEBUG comments in emitted NC output.
@@ -255,7 +255,7 @@ def emit_contour_simple(
                     comp = "R0"
                 elif phase_entry and radius_mode in ("RL", "RR") and not leadin_arc_replaced:
                     if not rnd_emitted:
-                        out.append(f"RND R{rnd_radius:.1f}")
+                        _append_rnd(out, rnd_radius, state=state)
                         rnd_emitted = True
                     comp = radius_mode
                 _append_changed(
@@ -292,7 +292,7 @@ def emit_contour_simple(
             if idx == replace_leadin_arc_index:
                 _append_debug(out, "replaced lead-in arc with L at contour start for RL/RR")
                 if not rnd_emitted:
-                    out.append(f"RND R{rnd_radius:.1f}")
+                    _append_rnd(out, rnd_radius, state=state)
                     rnd_emitted = True
                 _append_changed(
                     out,

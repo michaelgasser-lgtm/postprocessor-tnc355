@@ -98,7 +98,7 @@ def _state_coords(state):
     return (getattr(state, "x", None), getattr(state, "y", None), getattr(state, "z", None))
 
 
-def _append_changed(out, x=None, y=None, z=None, f=None, korrektur="", state=None):
+def _append_changed(out, x=None, y=None, z=None, f=None, korrektur="", state=None, force_xy=False):
     last_x, last_y, last_z = _state_coords(state)
     if last_x is None and last_y is None and last_z is None and out:
         last_x, last_y, last_z = _extract_axes_from_line(out[-1])
@@ -114,7 +114,49 @@ def _append_changed(out, x=None, y=None, z=None, f=None, korrektur="", state=Non
     if not axis_changed:
         return
 
-    out.append(_L(x=x, y=y, z=z, f=f, korrektur=korrektur))
+    emit_x = x
+    emit_y = y
+    if (force_xy or _previous_is_rnd(out)) and (x is not None or y is not None):
+        if emit_x is None:
+            emit_x = last_x
+        if emit_y is None:
+            emit_y = last_y
+
+    out.append(_L(x=emit_x, y=emit_y, z=z, f=f, korrektur=korrektur))
+
+
+def _previous_is_rnd(out):
+    return bool(out and isinstance(out[-1], str) and out[-1].lstrip().startswith("RND "))
+
+
+def _ensure_last_l_has_full_xy(out, state=None):
+    if not out:
+        return
+    line = out[-1]
+    if not isinstance(line, str) or not line.lstrip().startswith("L"):
+        return
+
+    x, y, z = _extract_axes_from_line(line)
+    if x is None and y is None and z is None:
+        return
+    state_x, state_y, _ = _state_coords(state)
+    if x is None:
+        x = state_x
+    if y is None:
+        y = state_y
+    if x is None or y is None:
+        return
+
+    tokens = line.split()
+    if not tokens or tokens[0] != "L":
+        return
+    rest = [token for token in tokens[1:] if not token.startswith(("X", "Y"))]
+    out[-1] = "  ".join(["L", _fmt_coord("X", x), _fmt_coord("Y", y)] + rest)
+
+
+def _append_rnd(out, radius, state=None):
+    _ensure_last_l_has_full_xy(out, state=state)
+    out.append(f"RND R{float(radius):.1f}")
 
 def _append_unique(out, line: str):
     """Append line only if it differs from the last emitted line."""
